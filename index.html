@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Open in Kite</title>
+<style>
+  :root { --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #ddd; --warn: #b45309; --btn: #387ed1; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #eee; --muted: #999; --line: #333; --warn: #f59e0b; } }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 16px/1.4 -apple-system, system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 15px; }
+  td, th { text-align: left; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+  .warn { color: var(--warn); font-weight: 600; margin: 12px 0; }
+  button { width: 100%; padding: 14px; font-size: 17px; border: 0; border-radius: 8px; background: var(--btn); color: #fff; }
+  button:disabled { opacity: .4; }
+</style>
+</head>
+<body>
+<h1 id="title">Open in Kite</h1>
+<div class="muted" id="age"></div>
+<table><thead><tr><th>Side</th><th>Contract</th><th>Qty</th><th>Price (edit in Kite)</th></tr></thead>
+<tbody id="legs"></tbody></table>
+<div class="warn">The price is the LTP when the alert was sent. Set your own price in Kite before you confirm.</div>
+<div class="warn" id="stale" hidden></div>
+<form id="f" method="post" action="https://kite.zerodha.com/connect/basket">
+  <input type="hidden" name="api_key" id="k">
+  <input type="hidden" name="data" id="d">
+  <button id="go" type="submit" disabled>Continue to Kite</button>
+</form>
+<p class="muted">Nothing is placed from this page. Kite shows the orders; you confirm them there.</p>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search), err = function (m) {
+    document.getElementById("title").textContent = m;
+  };
+  try {
+    var b64 = (q.get("d") || "").replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    var items = JSON.parse(atob(b64));
+    if (!Array.isArray(items) || !items.length || items.length > 4) return err("Bad link");
+    var ok = items.every(function (i) {
+      return i.exchange === "NFO" && i.order_type === "LIMIT" && /^(BUY|SELL)$/.test(i.transaction_type)
+        && i.quantity > 0 && i.price > 0 && /^[A-Z0-9&-]+$/.test(i.tradingsymbol);
+    });
+    if (!ok || !/^[A-Za-z0-9]+$/.test(q.get("k") || "")) return err("Bad link");
+    document.getElementById("title").textContent = q.get("t") || "Open in Kite";
+    var tb = document.getElementById("legs");
+    items.forEach(function (i) {
+      var tr = document.createElement("tr");
+      [i.transaction_type, i.tradingsymbol, i.quantity, i.price].forEach(function (v) {
+        var td = document.createElement("td"); td.textContent = v; tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    var mins = Math.round((Date.now() / 1000 - Number(q.get("ts") || 0)) / 60);
+    document.getElementById("age").textContent = "Alert sent " + mins + " min ago";
+    if (mins > 10) {
+      var s = document.getElementById("stale");
+      s.hidden = false; s.textContent = "This link is " + mins + " min old: prices have moved.";
+    }
+    document.getElementById("k").value = q.get("k");
+    document.getElementById("d").value = JSON.stringify(items);
+    document.getElementById("go").disabled = false;
+  } catch (e) { err("Bad link"); }
+})();
+</script>
+</body>
+</html>
